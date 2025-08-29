@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Microstructure Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js library for the price chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 1.5rem;
+        }
+        .order-table th, .order-table td {
+            padding: 0.5rem 1rem;
+            text-align: right;
+        }
+        .order-table th:first-child, .order-table td:first-child {
+            text-align: left;
+        }
+        .order-table tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .bid-price {
+            color: #38a169; /* Green */
+        }
+        .ask-price {
+            color: #e53e3e; /* Red */
+        }
+        .btn {
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        /* Custom styles for the message box */
+        .message-box {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            max-width: 300px;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            pointer-events: none;
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <!-- Main Container -->
+    <div class="container min-h-screen flex flex-col lg:flex-row gap-8">
+        <!-- Message Box -->
+        <div id="message-box" class="message-box bg-blue-600 text-white"></div>
+
+        <!-- Left Panel: Controls and Price Chart -->
+        <div class="w-full lg:w-1/3 flex flex-col gap-8">
+            <div class="bg-gray-800 p-6 rounded-2xl shadow-lg">
+                <h1 class="text-3xl font-bold mb-4 text-center">Market Microstructure Simulator</h1>
+                <p class="text-gray-400 mb-6 text-center">
+                    Simulate a virtual stock exchange. Place orders and observe the price dynamics and liquidity.
+                </p>
+
+                <!-- Order Placement Controls -->
+                <div class="flex flex-col gap-4">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <input id="order-price-input" type="number" placeholder="Price" class="w-full bg-gray-700 text-gray-200 p-3 rounded-xl border border-gray-600 focus:outline-none focus:border-blue-500">
+                        <input id="order-quantity-input" type="number" placeholder="Quantity" class="w-full bg-gray-700 text-gray-200 p-3 rounded-xl border border-gray-600 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button id="buy-limit-btn" class="btn w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl shadow-md">Buy Limit</button>
+                        <button id="sell-limit-btn" class="btn w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl shadow-md">Sell Limit</button>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button id="buy-market-btn" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-md">Buy Market</button>
+                        <button id="sell-market-btn" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-md">Sell Market</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Chart -->
+            <div class="bg-gray-800 p-6 rounded-2xl shadow-lg flex-1">
+                <h2 class="text-xl font-bold mb-4">Market Price</h2>
+                <canvas id="price-chart" class="w-full h-auto bg-gray-900 rounded-xl"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Panel: Order Book and Trades -->
+        <div class="w-full lg:w-2/3 flex flex-col gap-8">
+            <!-- Order Book -->
+            <div class="bg-gray-800 p-6 rounded-2xl shadow-lg flex-1">
+                <h2 class="text-xl font-bold mb-4">Order Book</h2>
+                <div class="flex flex-col-reverse md:flex-row gap-4">
+                    <!-- Asks (Sell Orders) -->
+                    <div class="w-full md:w-1/2 overflow-auto">
+                        <h3 class="text-lg font-semibold text-center mb-2 text-red-400">Asks (Sell)</h3>
+                        <table class="w-full order-table text-sm">
+                            <thead>
+                                <tr class="bg-gray-700">
+                                    <th>Quantity</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ask-book">
+                                <!-- Ask orders will be rendered here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Bids (Buy Orders) -->
+                    <div class="w-full md:w-1/2 overflow-auto">
+                        <h3 class="text-lg font-semibold text-center mb-2 text-green-400">Bids (Buy)</h3>
+                        <table class="w-full order-table text-sm">
+                            <thead>
+                                <tr class="bg-gray-700">
+                                    <th>Price</th>
+                                    <th>Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bid-book">
+                                <!-- Bid orders will be rendered here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="bg-gray-800 p-6 rounded-2xl shadow-lg flex-1">
+                <h2 class="text-xl font-bold mb-4">Recent Trades</h2>
+                <div class="overflow-auto max-h-[300px]">
+                    <table class="w-full order-table text-sm">
+                        <thead>
+                            <tr class="bg-gray-700">
+                                <th>Time</th>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-list">
+                            <!-- Recent trades will be rendered here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // ======================
+            // DOM Elements
+            // ======================
+            const priceInput = document.getElementById('order-price-input');
+            const quantityInput = document.getElementById('order-quantity-input');
+            const buyLimitBtn = document.getElementById('buy-limit-btn');
+            const sellLimitBtn = document.getElementById('sell-limit-btn');
+            const buyMarketBtn = document.getElementById('buy-market-btn');
+            const sellMarketBtn = document.getElementById('sell-market-btn');
+            const bidBookEl = document.getElementById('bid-book');
+            const askBookEl = document.getElementById('ask-book');
+            const tradesListEl = document.getElementById('trades-list');
+            const priceChartCanvas = document.getElementById('price-chart');
+            const messageBoxEl = document.getElementById('message-box');
+            let priceChart = null; // To hold the Chart.js instance
+
+            // ======================
+            // Data Structures
+            // ======================
+            const state = {
+                bids: new Map(), // Map<price, quantity>
+                asks: new Map(), // Map<price, quantity>
+                trades: [],
+                midPriceHistory: [],
+                lastPrice: 1000,
+                basePrice: 1000,
+                maxTrades: 20
+            };
+
+            // ======================
+            // Core Logic
+            // ======================
+
+            function showMessage(message, type = 'info', duration = 3000) {
+                let bgColor = 'bg-blue-600';
+                if (type === 'error') bgColor = 'bg-red-600';
+                if (type === 'success') bgColor = 'bg-green-600';
+
+                messageBoxEl.textContent = message;
+                messageBoxEl.className = `message-box ${bgColor} text-white show`;
+                
+                // Automatically hide the message after a duration
+                setTimeout(() => {
+                    messageBoxEl.className = `message-box ${bgColor} text-white`;
+                }, duration);
+            }
+            
+            function sortBids() {
+                // Sort bids in descending order by price
+                return new Map([...state.bids.entries()].sort((a, b) => b[0] - a[0]));
+            }
+
+            function sortAsks() {
+                // Sort asks in ascending order by price
+                return new Map([...state.asks.entries()].sort((a, b) => a[0] - b[0]));
+            }
+
+            function addTrade(price, quantity, side) {
+                const newTrade = {
+                    price: parseFloat(price).toFixed(2),
+                    quantity: parseInt(quantity, 10),
+                    side,
+                    timestamp: new Date().toLocaleTimeString(),
+                };
+                state.trades.unshift(newTrade);
+                if (state.trades.length > state.maxTrades) {
+                    state.trades.pop();
+                }
+                state.lastPrice = newTrade.price;
+            }
+
+            // Function to handle order submission
+            function processOrder(type, side, price, quantity) {
+                // Input validation
+                if (isNaN(quantity) || quantity <= 0) {
+                    showMessage('Quantity must be a positive number.', 'error');
+                    return;
+                }
+
+                if (type === 'limit' && (isNaN(price) || price <= 0)) {
+                    showMessage('Limit orders require a valid price.', 'error');
+                    return;
+                }
+
+                let remainingQuantity = quantity;
+
+                if (side === 'buy') {
+                    // Check for matching asks
+                    const sortedAsks = sortAsks();
+                    const matchedAsks = [];
+
+                    for (const [askPrice, askQuantity] of sortedAsks) {
+                        if (remainingQuantity > 0 && (type === 'market' || parseFloat(askPrice) <= price)) {
+                            const tradeQuantity = Math.min(remainingQuantity, askQuantity);
+                            addTrade(askPrice, tradeQuantity, 'buy');
+                            remainingQuantity -= tradeQuantity;
+                            const newAskQuantity = askQuantity - tradeQuantity;
+                            matchedAsks.push({ price: askPrice, quantity: newAskQuantity });
+                        }
+                    }
+
+                    // Update asks in state
+                    for (const match of matchedAsks) {
+                        if (match.quantity <= 0) {
+                            state.asks.delete(match.price);
+                        } else {
+                            state.asks.set(match.price, match.quantity);
+                        }
+                    }
+
+                    // Add remaining quantity to the bid book if not fully filled
+                    if (remainingQuantity > 0 && type === 'limit') {
+                        const currentQuantity = state.bids.get(price.toFixed(2)) || 0;
+                        state.bids.set(price.toFixed(2), currentQuantity + remainingQuantity);
+                    }
+                } else if (side === 'sell') {
+                    // Check for matching bids
+                    const sortedBids = sortBids();
+                    const matchedBids = [];
+
+                    for (const [bidPrice, bidQuantity] of sortedBids) {
+                        if (remainingQuantity > 0 && (type === 'market' || parseFloat(bidPrice) >= price)) {
+                            const tradeQuantity = Math.min(remainingQuantity, bidQuantity);
+                            addTrade(bidPrice, tradeQuantity, 'sell');
+                            remainingQuantity -= tradeQuantity;
+                            const newBidQuantity = bidQuantity - tradeQuantity;
+                            matchedBids.push({ price: bidPrice, quantity: newBidQuantity });
+                        }
+                    }
+
+                    // Update bids in state
+                    for (const match of matchedBids) {
+                        if (match.quantity <= 0) {
+                            state.bids.delete(match.price);
+                        } else {
+                            state.bids.set(match.price, match.quantity);
+                        }
+                    }
+
+                    // Add remaining quantity to the ask book if not fully filled
+                    if (remainingQuantity > 0 && type === 'limit') {
+                        const currentQuantity = state.asks.get(price.toFixed(2)) || 0;
+                        state.asks.set(price.toFixed(2), currentQuantity + remainingQuantity);
+                    }
+                }
+
+                // Update UI after processing
+                renderUI();
+            }
+
+            // ======================
+            // UI Rendering
+            // ======================
+
+            function renderUI() {
+                // Render Order Book
+                const sortedBids = sortBids();
+                const sortedAsks = sortAsks();
+
+                bidBookEl.innerHTML = '';
+                sortedBids.forEach((quantity, price) => {
+                    const row = `<tr><td class="bid-price">${price}</td><td>${quantity}</td></tr>`;
+                    bidBookEl.innerHTML += row;
+                });
+
+                askBookEl.innerHTML = '';
+                sortedAsks.forEach((quantity, price) => {
+                    const row = `<tr><td>${quantity}</td><td class="ask-price">${price}</td></tr>`;
+                    askBookEl.innerHTML += row;
+                });
+
+                // Render Trades
+                tradesListEl.innerHTML = '';
+                state.trades.forEach(trade => {
+                    const row = `<tr><td>${trade.timestamp}</td><td>${trade.quantity}</td><td>${trade.price}</td><td>${trade.side}</td></tr>`;
+                    tradesListEl.innerHTML += row;
+                });
+
+                // Update Chart
+                state.midPriceHistory.push(state.lastPrice);
+                // Limit the number of data points to keep the chart from stretching
+                const maxDataPoints = 50;
+                if (state.midPriceHistory.length > maxDataPoints) {
+                    state.midPriceHistory.shift();
+                }
+
+                if (priceChart) {
+                    priceChart.data.labels = Array.from({length: state.midPriceHistory.length}, (_, i) => i);
+                    priceChart.data.datasets[0].data = state.midPriceHistory;
+                    priceChart.update();
+                } else {
+                    priceChart = new Chart(priceChartCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: Array.from({length: state.midPriceHistory.length}, (_, i) => i),
+                            datasets: [{
+                                label: 'Last Traded Price',
+                                data: state.midPriceHistory,
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1,
+                                fill: false
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { labels: { color: '#e2e8f0' } },
+                                tooltip: { callbacks: { label: (context) => `Price: $${context.raw.toFixed(2)}` } }
+                            },
+                            scales: {
+                                x: {
+                                    display: false,
+                                    grid: { display: false }
+                                },
+                                y: {
+                                    ticks: { color: '#e2e8f0' }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // ======================
+            // Event Listeners
+            // ======================
+            buyLimitBtn.addEventListener('click', () => {
+                const price = parseFloat(priceInput.value);
+                const quantity = parseInt(quantityInput.value, 10);
+                processOrder('limit', 'buy', price, quantity);
+            });
+
+            sellLimitBtn.addEventListener('click', () => {
+                const price = parseFloat(priceInput.value);
+                const quantity = parseInt(quantityInput.value, 10);
+                processOrder('limit', 'sell', price, quantity);
+            });
+
+            buyMarketBtn.addEventListener('click', () => {
+                const quantity = parseInt(quantityInput.value, 10);
+                processOrder('market', 'buy', null, quantity);
+            });
+
+            sellMarketBtn.addEventListener('click', () => {
+                const quantity = parseInt(quantityInput.value, 10);
+                processOrder('market', 'sell', null, quantity);
+            });
+            
+            // Initialize market on load
+            function initializeMarket() {
+                // Initial bids
+                for (let i = 0; i < 5; i++) {
+                    const price = state.basePrice - 0.5 * i;
+                    const quantity = Math.floor(Math.random() * 100) + 10;
+                    state.bids.set(price.toFixed(2), quantity);
+                }
+                // Initial asks
+                for (let i = 0; i < 5; i++) {
+                    const price = state.basePrice + 0.5 * (i + 1);
+                    const quantity = Math.floor(Math.random() * 100) + 10;
+                    state.asks.set(price.toFixed(2), quantity);
+                }
+                renderUI();
+            }
+            initializeMarket();
+        });
+    </script>
+</body>
+</html>
